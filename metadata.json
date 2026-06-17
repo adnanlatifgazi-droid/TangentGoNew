@@ -1,0 +1,6 @@
+{
+  "name": "TangentGo",
+  "description": "Connecting people through reliable real-world community activities and matches.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
