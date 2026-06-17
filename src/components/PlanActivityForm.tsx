@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Send, Calendar, Users, MapPin, AlertCircle } from 'lucide-react';
-import { TangentEvent } from '../types';
+import { TangentEvent, UserProfile } from '../types';
 
 interface PlanActivityFormProps {
+  user: UserProfile;
   onBack: () => void;
   onSubmitEvent: (newEvent: TangentEvent) => void;
 }
 
-export default function PlanActivityForm({ onBack, onSubmitEvent }: PlanActivityFormProps) {
+export default function PlanActivityForm({ user, onBack, onSubmitEvent }: PlanActivityFormProps) {
   const [category, setCategory] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -55,10 +56,10 @@ export default function PlanActivityForm({ onBack, onSubmitEvent }: PlanActivity
       maxCompanions: maxCompanions ? parseInt(maxCompanions, 10) : 4,
       duration: '2 Hours',
       organizer: {
-        name: 'Alex Rivera', // Logged in user
+        name: user.name, // Logged in user (mocked identity)
         role: 'Creator',
         rating: '100% Reliability Rating',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=120'
+        avatar: user.avatar
       }
     };
 

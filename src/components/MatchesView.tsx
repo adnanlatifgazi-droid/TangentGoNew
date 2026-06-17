@@ -1,20 +1,229 @@
-import React, { useState } from 'react';
-import { Sparkles, Sliders, Check, Clock, UserCheck, X, Compass, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, Check, Clock, UserCheck, X, Compass, CheckCircle, Calendar, List, MapPin } from 'lucide-react';
 import { MatchProfile, TangentEvent } from '../types';
+
+const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+// Deterministic day-of-month for an event so the calendar placement is stable per event.
+function eventDayOfMonth(event: TangentEvent, daysInMonth: number) {
+  const hash = event.id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return (hash % daysInMonth) + 1;
+}
+
+// Events section shown inside the match profile dialog: Calendar (default) + List views.
+function ProfileEventsSection({ events, personName, resetKey }: { events: TangentEvent[]; personName: string; resetKey: string }) {
+  const [view, setView] = useState<'calendar' | 'list'>('calendar');
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  // Reset to the default (calendar view, default day) whenever a different member is opened
+  useEffect(() => {
+    setView('calendar');
+    setSelectedDay(null);
+  }, [resetKey]);
+
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const monthLabel = today.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstWeekday = new Date(year, month, 1).getDay();
+
+  // Map events onto deterministic days of the current month
+  const eventsByDay = new Map<number, TangentEvent[]>();
+  events.forEach((evt) => {
+    const day = eventDayOfMonth(evt, daysInMonth);
+    const list = eventsByDay.get(day) || [];
+    list.push(evt);
+    eventsByDay.set(day, list);
+  });
+
+  const firstEventDay = events.length ? eventDayOfMonth(events[0], daysInMonth) : null;
+  const activeDay = selectedDay ?? firstEventDay;
+  const activeDayEvents = activeDay ? (eventsByDay.get(activeDay) || []) : [];
+
+  // Build calendar grid cells (leading blanks + day numbers)
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <div className="space-y-3 text-left pt-1">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+          Events
+        </h4>
+
+        {/* Calendar / List view toggle */}
+        <div className="flex items-center bg-zinc-100 rounded-md p-0.5 select-none">
+          <button
+            type="button"
+            onClick={() => setView('calendar')}
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition cursor-pointer ${
+              view === 'calendar' ? 'bg-white text-black shadow-2xs' : 'text-zinc-500 hover:text-black'
+            }`}
+            id="profile-events-view-calendar"
+          >
+            <Calendar className="w-3 h-3" />
+            <span>Calendar</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('list')}
+            className={`flex items-center space-x-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition cursor-pointer ${
+              view === 'list' ? 'bg-white text-black shadow-2xs' : 'text-zinc-500 hover:text-black'
+            }`}
+            id="profile-events-view-list"
+          >
+            <List className="w-3 h-3" />
+            <span>List</span>
+          </button>
+        </div>
+      </div>
+
+      {events.length === 0 ? (
+        <div className="text-center py-6 bg-zinc-50 border border-zinc-150 rounded-lg">
+          <p className="text-xs text-zinc-500">No other events for {personName} yet.</p>
+        </div>
+      ) : view === 'calendar' ? (
+        <div className="space-y-3" id="profile-events-calendar">
+          <p className="text-xs font-bold text-zinc-800 text-center">{monthLabel}</p>
+
+          {/* Weekday header */}
+          <div className="grid grid-cols-7 gap-1">
+            {WEEKDAYS.map((w) => (
+              <span key={w} className="text-[9px] font-bold text-zinc-400 text-center uppercase">
+                {w}
+              </span>
+            ))}
+          </div>
+
+          {/* Day grid */}
+          <div className="grid grid-cols-7 gap-1">
+            {cells.map((day, idx) => {
+              if (day === null) return <span key={`blank-${idx}`} />;
+              const hasEvents = eventsByDay.has(day);
+              const isActive = activeDay === day;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => hasEvents && setSelectedDay(day)}
+                  disabled={!hasEvents}
+                  className={`relative aspect-square rounded-md text-[11px] font-semibold flex items-center justify-center transition ${
+                    isActive && hasEvents
+                      ? 'bg-black text-white'
+                      : hasEvents
+                      ? 'bg-teal-50 text-teal-800 hover:bg-teal-100 cursor-pointer'
+                      : 'text-zinc-400'
+                  }`}
+                >
+                  {day}
+                  {hasEvents && !isActive && (
+                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-teal-500" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Events for the selected day */}
+          <div className="space-y-2 pt-1">
+            {activeDayEvents.length > 0 ? (
+              activeDayEvents.map((evt) => (
+                <div key={evt.id} className="flex items-center space-x-3 p-2.5 border border-zinc-150 rounded-lg">
+                  <img
+                    src={evt.image}
+                    alt={evt.title}
+                    className="w-10 h-10 rounded object-cover shrink-0 filter brightness-95"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-zinc-900 truncate capitalize">{evt.title}</p>
+                    <p className="text-[10px] text-zinc-500 font-medium truncate">{evt.dateTime}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-[11px] text-zinc-400 text-center py-2">
+                Select a highlighted day to see events.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* LIST VIEW */
+        <div className="space-y-2" id="profile-events-list">
+          {events.map((evt) => (
+            <div
+              key={evt.id}
+              className="flex items-center space-x-3 p-2.5 border border-zinc-150 rounded-lg hover:border-teal-300 transition"
+            >
+              <img
+                src={evt.image}
+                alt={evt.title}
+                className="w-12 h-12 rounded object-cover shrink-0 filter brightness-95"
+                referrerPolicy="no-referrer"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-zinc-900 truncate capitalize">{evt.title}</p>
+                <p className="text-[10px] text-zinc-500 font-medium flex items-center space-x-1 truncate">
+                  <Calendar className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{evt.dateTime}</span>
+                </p>
+                <p className="text-[10px] text-zinc-500 font-medium flex items-center space-x-1 truncate">
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{evt.location.split(',')[0]}</span>
+                </p>
+              </div>
+              <span className="text-[8px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded uppercase tracking-wide shrink-0">
+                {evt.category}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface MatchesViewProps {
   matches: MatchProfile[];
   events: TangentEvent[];
+  eventFilter?: { category: string; title: string } | null;
+  onClearFilter?: () => void;
 }
 
-export default function MatchesView({ matches, events }: MatchesViewProps) {
+export default function MatchesView({ matches, events, eventFilter, onClearFilter }: MatchesViewProps) {
   const [activeFilter, setActiveFilter] = useState<'all' | 'high' | 'shared' | 'nearby'>('all');
   const [selectedMatch, setSelectedMatch] = useState<MatchProfile | null>(null);
   const [inviteMatch, setInviteMatch] = useState<MatchProfile | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
+  // Reset tab filter to "All" whenever a new event filter arrives
+  useEffect(() => {
+    if (eventFilter) setActiveFilter('all');
+  }, [eventFilter]);
+
+  // Narrow to companions whose skills overlap with the event category (loose contains-match).
+  // Falls back to the full list when no skill overlap is found.
+  const skillMatchesCategory = (skills: string[], category: string) => {
+    const catLow = category.toLowerCase();
+    return skills.some(sk => {
+      const skLow = sk.toLowerCase();
+      return skLow === catLow || skLow.includes(catLow) || catLow.includes(skLow);
+    });
+  };
+
+  const categoryMatches = eventFilter
+    ? matches.filter(m => skillMatchesCategory(m.skills, eventFilter.category))
+    : matches;
+
+  // If no skill overlap found, fall back to all matches so the page is never empty
+  const noExactSkillMatch = eventFilter !== null && eventFilter !== undefined && categoryMatches.length === 0;
+  const baseMatches = noExactSkillMatch ? matches : categoryMatches;
+
   // Filtered Matches
-  const filteredMatches = matches.filter(m => {
+  const filteredMatches = baseMatches.filter(m => {
     if (activeFilter === 'high') return m.reliability >= 97;
     if (activeFilter === 'shared') return m.suggestedCommonEvents >= 3;
     if (activeFilter === 'nearby') return m.id === 'm1' || m.id === 'm3'; // Simulated geographically local
@@ -30,6 +239,25 @@ export default function MatchesView({ matches, events }: MatchesViewProps) {
     }, 2500);
   };
 
+  // Derive "this member's other events" from the global list (no real association in mock data).
+  // Match by skill/category overlap; fall back to a stable slice so the section is never empty.
+  const getMatchEvents = (match: MatchProfile): TangentEvent[] => {
+    const active = events.filter((e) => !e.isDraft);
+    const bySkill = active.filter((e) =>
+      match.skills.some((sk) => {
+        const s = sk.toLowerCase();
+        const cat = e.category.toLowerCase();
+        const tag = (e.tag || '').toLowerCase();
+        return s === cat || cat.includes(s) || s.includes(cat) || (!!tag && (tag.includes(s) || s.includes(tag)));
+      })
+    );
+    if (bySkill.length > 0) return bySkill;
+    if (active.length === 0) return [];
+    const hash = match.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+    const start = hash % active.length;
+    return [...active.slice(start), ...active.slice(0, start)].slice(0, 3);
+  };
+
   return (
     <div className="max-w-xl mx-auto py-6 px-4 space-y-6 animate-in fade-in duration-300" id="matches-view-panel">
       
@@ -42,6 +270,36 @@ export default function MatchesView({ matches, events }: MatchesViewProps) {
           Connect with reliable activity partners who share your interests and schedule. Every match is vetted by the community.
         </p>
       </div>
+
+      {/* Event context filter banner */}
+      {eventFilter && (
+        <div className="flex items-center justify-between bg-teal-50 border border-teal-200 rounded-lg px-4 py-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center space-x-2 min-w-0">
+            <Sparkles className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-teal-900 truncate">
+                {eventFilter.category} companions for:
+              </p>
+              <p className="text-[11px] text-teal-700 font-medium truncate">
+                "{eventFilter.title}"
+              </p>
+              {noExactSkillMatch && (
+                <p className="text-[10px] text-teal-600 mt-0.5">
+                  No exact skill match — showing all companions
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onClearFilter}
+            className="p-1.5 text-teal-500 hover:text-teal-900 hover:bg-teal-100 rounded-full transition cursor-pointer shrink-0 ml-2"
+            title="Clear filter"
+            id="matches-clear-event-filter"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Filter Tabs matching Image 8 */}
       <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1 select-none">
@@ -80,18 +338,6 @@ export default function MatchesView({ matches, events }: MatchesViewProps) {
           id="match-filter-nearby"
         >
           Nearby
-        </button>
-      </div>
-
-      {/* Refine Search button matching Image 8 */}
-      <div className="flex justify-end select-none">
-        <button 
-          onClick={() => alert(`Refinement filters active: proximity: 10 miles, skills matching: true, rating cutoff: 90%`)}
-          className="inline-flex items-center space-x-1.5 px-4 py-2 border border-zinc-200 hover:border-black text-xs font-bold rounded-sm hover:bg-zinc-50 transition cursor-pointer"
-          id="refine-matches-search-btn"
-        >
-          <Sliders className="w-3.5 h-3.5" />
-          <span>Refine Search</span>
         </button>
       </div>
 
@@ -183,8 +429,14 @@ export default function MatchesView({ matches, events }: MatchesViewProps) {
 
       {/* MATCH BIO SHOWCASE MODAL / DRAWER */}
       {selectedMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-zinc-200 shadow-2xl p-6 w-full max-w-md relative animate-in zoom-in-95 duration-200">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          onClick={() => setSelectedMatch(null)}
+        >
+          <div
+            className="bg-white rounded-lg border border-zinc-200 shadow-2xl p-6 w-full max-w-md relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto no-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button 
               onClick={() => setSelectedMatch(null)}
               className="absolute top-4 right-4 p-1 rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-black transition cursor-pointer"
@@ -235,6 +487,14 @@ export default function MatchesView({ matches, events }: MatchesViewProps) {
                 ))}
               </div>
             </div>
+
+            {/* Events section: this member's other events (calendar + list) */}
+            <hr className="border-zinc-100 my-4" />
+            <ProfileEventsSection
+              resetKey={selectedMatch.id}
+              events={getMatchEvents(selectedMatch)}
+              personName={selectedMatch.name}
+            />
 
             <button
               onClick={() => {

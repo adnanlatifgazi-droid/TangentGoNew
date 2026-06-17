@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, MapPin, Heart, Shield, Check, Share2, Copy, Mail, HelpCircle, Users, Clock } from 'lucide-react';
-import { TangentEvent } from '../types';
+import { TangentEvent, MatchProfile } from '../types';
+import MatchesDialog from './MatchesDialog';
 
 interface EventDetailProps {
   event: TangentEvent;
@@ -12,6 +13,7 @@ interface EventDetailProps {
   isFavorited: boolean;
   onLoginTrigger: () => void;
   onRegisterTrigger: () => void;
+  matches: MatchProfile[];
 }
 
 export default function EventDetail({
@@ -23,9 +25,16 @@ export default function EventDetail({
   hasJoined,
   isFavorited,
   onLoginTrigger,
-  onRegisterTrigger
+  onRegisterTrigger,
+  matches
 }: EventDetailProps) {
   const [copied, setCopied] = useState(false);
+  const [showMatchesDialog, setShowMatchesDialog] = useState(false);
+
+  // Always start at the top of the page when an event detail opens
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [event.id]);
 
   // Attendees count calculation
   const totalAttendees = (event.attendeesCount || 6) + (hasJoined ? 1 : 0);
@@ -238,7 +247,11 @@ export default function EventDetail({
             {/* Main Interactive Button Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <button
-                onClick={() => onJoinEventToggle(event.id)}
+                onClick={() => {
+                  const wasJoined = hasJoined;
+                  onJoinEventToggle(event.id);
+                  if (!wasJoined) setShowMatchesDialog(true);
+                }}
                 className={`w-full py-3.5 rounded font-bold text-sm transition flex items-center justify-center space-x-2 select-none cursor-pointer shadow-md ${
                   hasJoined 
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
@@ -341,6 +354,14 @@ export default function EventDetail({
         </div>
 
       </div>
+
+      {/* Matches invite dialog (opens after joining an event) */}
+      <MatchesDialog
+        isOpen={showMatchesDialog}
+        onClose={() => setShowMatchesDialog(false)}
+        matches={matches}
+        eventTitle={event.title}
+      />
     </div>
   );
 }

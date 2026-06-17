@@ -32,6 +32,32 @@ import MyEventsView from './components/MyEventsView';
 // Types & Mock Data
 import { AppTab, TangentEvent, MatchProfile, UserProfile } from './types';
 import { initialEvents, initialMatches, initialUser } from './mockData';
+import { buildUserProfileFromEmail } from './userIdentity';
+
+// Bump this whenever the shape/seed of the mocked demo data changes. On load we
+// drop any persisted state from an older version so a stale logged-in profile
+// (e.g. the old "Alex Rivera" default) can never linger between demo runs.
+const STORAGE_VERSION = 'v2';
+const STORAGE_KEYS = [
+  'isLoggedIn',
+  'activeTab',
+  'tangent_events',
+  'tangent_matches',
+  'tangent_user',
+  'tangent_favs',
+  'tangent_joined',
+];
+
+(function ensureStorageVersion() {
+  try {
+    if (localStorage.getItem('tangent_storage_version') !== STORAGE_VERSION) {
+      STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+      localStorage.setItem('tangent_storage_version', STORAGE_VERSION);
+    }
+  } catch {
+    /* localStorage unavailable (private mode / SSR) - safe to ignore. */
+  }
+})();
 
 export default function App() {
   // App States with durable local persistence
@@ -74,6 +100,7 @@ export default function App() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [matchEventFilter, setMatchEventFilter] = useState<{ category: string; title: string } | null>(null);
 
   // Sync state to LocalStorage
   useEffect(() => {
@@ -93,19 +120,24 @@ export default function App() {
 
   // Auth Functions
   const handleLoginSuccess = (email: string) => {
+    // No backend yet: build a complete, coherent profile from the email so the
+    // logged-in identity (name, photo, city, bio, interests, stats) is fully
+    // replaced rather than partially overriding the default seed user.
+    const profile = buildUserProfileFromEmail(email);
     setIsLoggedIn(true);
     setShowLoginModal(false);
-    triggerToast(`Logged in successfully! Welcome back to TangentGo.`);
+    setUser(profile);
+    triggerToast(`Logged in successfully! Welcome back, ${profile.name}.`);
   };
 
   const handleRegisterSuccess = (fullName: string, email: string) => {
+    // Same mocked profile generation, but honour the name the user typed in.
+    const profile = buildUserProfileFromEmail(email);
+    const trimmedName = fullName.trim();
     setIsLoggedIn(true);
-    setUser({
-      ...user,
-      name: fullName
-    });
+    setUser({ ...profile, name: trimmedName || profile.name });
     setShowRegisterModal(false);
-    triggerToast(`Welcome to the TangentGo family, ${fullName}!`);
+    triggerToast(`Welcome to the TangentGo family, ${trimmedName || profile.name}!`);
   };
 
   const handleLogout = () => {
@@ -113,6 +145,7 @@ export default function App() {
     setActiveTab('Home');
     setSelectedEventId(null);
     setShowPlanForm(false);
+    setMatchEventFilter(null);
     triggerToast(`Logged out. See you next session!`);
   };
 
@@ -141,6 +174,15 @@ export default function App() {
         return [...prev, id];
       }
     });
+  };
+
+  // Navigate to Matches filtered by this event's category
+  const handleViewMatchesForEvent = (event: TangentEvent) => {
+    setMatchEventFilter({ category: event.category, title: event.title });
+    setActiveTab('Matches');
+    setSelectedEventId(null);
+    setShowPlanForm(false);
+    triggerToast(`Showing companions for ${event.category} events`);
   };
 
   const handleCreateEvent = (newEvent: TangentEvent) => {
@@ -181,7 +223,7 @@ export default function App() {
             initial={{ opacity: 0, y: -40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -40 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 border border-zinc-850 text-white text-xs font-bold px-5 py-3 rounded shadow-2xl flex items-center space-x-2 select-none"
+            className="fixed top-20 inset-x-0 mx-auto w-fit max-w-[calc(100vw-2rem)] z-50 bg-zinc-900 border border-zinc-850 text-white text-xs font-bold px-5 py-3 rounded shadow-2xl flex items-center space-x-2 select-none"
             id="global-toast-notification"
           >
             <span className="w-2 h-2 rounded-full bg-teal-400"></span>
@@ -198,6 +240,7 @@ export default function App() {
           setActiveTab(tab);
           setSelectedEventId(null);
           setShowPlanForm(false);
+          if (tab !== 'Matches') setMatchEventFilter(null);
         }}
         user={user}
         onLoginClick={() => setShowLoginModal(true)}
@@ -211,6 +254,7 @@ export default function App() {
         {/* VIEW 1: PLAN ACTIVITY CREATOR (Visible under Active form trigger) */}
         {showPlanForm ? (
           <PlanActivityForm 
+            user={user}
             onBack={() => {
               setShowPlanForm(false);
               setSelectedEventId(null);
@@ -230,6 +274,7 @@ export default function App() {
               isFavorited={favoriteIds.includes(currentSelectedEvent.id)}
               onLoginTrigger={() => setShowLoginModal(true)}
               onRegisterTrigger={() => setShowRegisterModal(true)}
+              matches={matches}
             />
           ) : (
             /* NAVIGATION VIEWS WRAPPER */
@@ -246,6 +291,8 @@ export default function App() {
                   onJoinEventToggle={handleJoinToggle}
                   joinedIds={joinedIds}
                   onRegisterTrigger={() => setShowRegisterModal(true)}
+                  onLoginTrigger={() => setShowLoginModal(true)}
+                  onViewMatchesForEvent={handleViewMatchesForEvent}
                 />
               )}
 
@@ -255,6 +302,8 @@ export default function App() {
                   <MatchesView 
                     matches={matches} 
                     events={events}
+                    eventFilter={matchEventFilter}
+                    onClearFilter={() => setMatchEventFilter(null)}
                   />
                 ) : (
                   <div className="max-w-md mx-auto text-center py-20 bg-white border border-gray-100 rounded-lg shadow-5xs p-6 space-y-4">
@@ -401,6 +450,7 @@ export default function App() {
                 setActiveTab('Home');
                 setSelectedEventId(null);
                 setShowPlanForm(false);
+                setMatchEventFilter(null);
               }}
               className={`flex flex-col items-center space-y-1 cursor-pointer transition ${
                 activeTab === 'Home' ? 'text-black font-bold' : 'text-zinc-400 hover:text-black'
@@ -446,6 +496,7 @@ export default function App() {
                 setActiveTab('Categories');
                 setSelectedEventId(null);
                 setShowPlanForm(false);
+                setMatchEventFilter(null);
               }}
               className={`flex flex-col items-center space-y-1 cursor-pointer transition ${
                 activeTab === 'Categories' ? 'text-black font-bold' : 'text-zinc-400 hover:text-black'
@@ -462,6 +513,7 @@ export default function App() {
                 setActiveTab('Events');
                 setSelectedEventId(null);
                 setShowPlanForm(false);
+                setMatchEventFilter(null);
               }}
               className={`flex flex-col items-center space-y-1 cursor-pointer transition relative ${
                 activeTab === 'Events' ? 'text-black font-bold' : 'text-zinc-400 hover:text-black'

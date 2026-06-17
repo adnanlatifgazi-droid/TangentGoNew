@@ -18,6 +18,21 @@ body {
   color: #1e293b;
 }
 
+/* Prevent accidental horizontal scrolling on mobile.
+   Applied to <html> (the viewport scroller) so position: sticky keeps working. */
+html {
+  overflow-x: hidden;
+}
+
+/* Utility to hide scrollbars on internal horizontal scrollers (filter rows, tabs) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom scrollbar hiding or sizing */
 ::-webkit-scrollbar {
   width: 6px;
